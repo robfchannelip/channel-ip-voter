@@ -90,13 +90,8 @@ console.log(`Loaded ${ITEMS.length} items`);
 // ============================================
 app.use(express.json({ limit: '1mb' }));
 
-// Serve static files from public/ if it exists, otherwise from repo root
+// Resolve index.html in any of the candidate locations
 const PUBLIC_DIRS = [path.join(__dirname, 'public'), __dirname];
-for (const dir of PUBLIC_DIRS) {
-  if (fs.existsSync(dir)) app.use(express.static(dir));
-}
-
-// Resolve index.html in either location
 function findIndexHtml() {
   for (const dir of PUBLIC_DIRS) {
     const candidate = path.join(dir, 'index.html');
@@ -105,13 +100,21 @@ function findIndexHtml() {
   return null;
 }
 
-// Explicit root handler — Express's static doesn't always serve `/` for `index.html`
-// when index.html is at the repo root, depending on the static order
+// Explicit root handler — comes BEFORE any static serving so it always wins for "/"
 app.get('/', (req, res) => {
   const idx = findIndexHtml();
   if (idx) return res.sendFile(idx);
   res.status(500).send('index.html not found in public/ or repo root.');
 });
+
+// Serve only static files from /public/ (if present). We deliberately do NOT serve
+// the repo root as static, because that would expose package.json and server.js,
+// and would also match "/" against random files. All product images are inlined as
+// base64 in /api/items, so we don't need to serve images by URL anyway.
+const publicDir = path.join(__dirname, 'public');
+if (fs.existsSync(publicDir)) {
+  app.use(express.static(publicDir));
+}
 
 // Simple password gate
 function requirePassword(req, res, next) {
