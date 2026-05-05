@@ -1,0 +1,22 @@
+databases:
+  - name: channel-ip-voter-db
+    plan: free
+    databaseName: voter
+    user: voter
+
+services:
+  - type: web
+    name: channel-ip-voter
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATABASE_URL
+        fromDatabase:
+          name: channel-ip-voter-db
+          property: connectionString
+      - key: TEAM_PASSWORD
+        value: channelip
