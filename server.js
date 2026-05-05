@@ -58,13 +58,26 @@ const ITEMS_RAW = [
 ];
 
 // Load images at startup and inline as base64 data URIs
+// Try multiple locations because GitHub flatten-on-upload can put files at the root
+const IMAGE_DIRS = [
+  path.join(__dirname, 'public', 'product-images'),
+  path.join(__dirname, 'product-images'),
+  path.join(__dirname, 'public'),
+  __dirname, // root of the repo
+];
 const ITEMS = ITEMS_RAW.map(item => {
-  const imgPath = path.join(__dirname, 'public', 'product-images', item.image);
   let imageDataUri = '';
-  try {
-    const data = fs.readFileSync(imgPath);
-    imageDataUri = `data:image/png;base64,${data.toString('base64')}`;
-  } catch (e) {
+  for (const dir of IMAGE_DIRS) {
+    const imgPath = path.join(dir, item.image);
+    try {
+      const data = fs.readFileSync(imgPath);
+      imageDataUri = `data:image/png;base64,${data.toString('base64')}`;
+      break;
+    } catch (e) {
+      // try next dir
+    }
+  }
+  if (!imageDataUri) {
     console.warn(`Image missing for ${item.id}: ${item.image}`);
   }
   return { ...item, image: imageDataUri };
@@ -76,7 +89,29 @@ console.log(`Loaded ${ITEMS.length} items`);
 // Middleware
 // ============================================
 app.use(express.json({ limit: '1mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve static files from public/ if it exists, otherwise from repo root
+const PUBLIC_DIRS = [path.join(__dirname, 'public'), __dirname];
+for (const dir of PUBLIC_DIRS) {
+  if (fs.existsSync(dir)) app.use(express.static(dir));
+}
+
+// Resolve index.html in either location
+function findIndexHtml() {
+  for (const dir of PUBLIC_DIRS) {
+    const candidate = path.join(dir, 'index.html');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+// Explicit root handler — Express's static doesn't always serve `/` for `index.html`
+// when index.html is at the repo root, depending on the static order
+app.get('/', (req, res) => {
+  const idx = findIndexHtml();
+  if (idx) return res.sendFile(idx);
+  res.status(500).send('index.html not found in public/ or repo root.');
+});
 
 // Simple password gate
 function requirePassword(req, res, next) {
